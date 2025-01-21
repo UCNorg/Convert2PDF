@@ -57,26 +57,90 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           verbose: true
 
-  snapshot_release:
+  snapshot_amd64:
     if: github.event_name == 'pull_request'
     needs:
       - tests
-    name: Snapshot release
+    name: Snapshot linux/amd64
+    uses: ./.github/workflows/reusable_build_push_arch_tags.yml
+    secrets: inherit
+    with:
+      runs_on: 'ubuntu-latest'
+      platform: 'linux/amd64'
+      gotenberg_version: ${{ github.head_ref }}
+      docker_registry: 'gotenberg'
+      docker_repository: 'snapshot'
+
+  snapshot_386:
+    if: github.event_name == 'pull_request'
+    needs:
+      - tests
+    name: Snapshot linux/386
+    uses: ./.github/workflows/reusable_build_push_arch_tags.yml
+    secrets: inherit
+    with:
+      runs_on: 'ubuntu-latest'
+      platform: 'linux/386'
+      gotenberg_version: ${{ github.head_ref }}
+      docker_registry: 'gotenberg'
+      docker_repository: 'snapshot'
+
+  snapshot_arm64:
+    if: github.event_name == 'pull_request'
+    needs:
+      - tests
+    name: Snapshot linux/arm64
+    uses: ./.github/workflows/reusable_build_push_arch_tags.yml
+    secrets: inherit
+    with:
+      runs_on: 'ubuntu-24.04-arm'
+      platform: 'linux/arm64'
+      gotenberg_version: ${{ github.head_ref }}
+      docker_registry: 'gotenberg'
+      docker_repository: 'snapshot'
+
+  snapshot_arm_v7:
+    if: github.event_name == 'pull_request'
+    needs:
+      - tests
+    name: Snapshot linux/arm/v7
+    uses: ./.github/workflows/reusable_build_push_arch_tags.yml
+    secrets: inherit
+    with:
+      runs_on: 'ubuntu-24.04-arm'
+      platform: 'linux/arm/v7'
+      gotenberg_version: ${{ github.head_ref }}
+      docker_registry: 'gotenberg'
+      docker_repository: 'snapshot'
+
+  merge_snapshot_arch_tags:
+    needs:
+      - snapshot_amd64
+      - snapshot_386
+      - snapshot_arm64
+      - snapshot_arm_v7
+    name: Merge Snapshot Arch Tags
+    uses: ./.github/workflows/reusable_merge_arch_tags.yml
+    secrets: inherit
+    with:
+      arch_tags: "${{ needs.snapshot_amd64.outputs.arch_tags }},${{ needs.snapshot_386.outputs.arch_tags }},${{ needs.snapshot_arm64.outputs.arch_tags }},${{ needs.snapshot_arm_v7.outputs.arch_tags }}"
+
+  clean_snapshot_arch_tags:
+    needs:
+      - merge_snapshot_arch_tags
+      # Make outputs available.
+      - snapshot_amd64
+      - snapshot_386
+      - snapshot_arm64
+      - snapshot_arm_v7
+    name: Clean Snapshot Arch Tags
     runs-on: ubuntu-latest
     steps:
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Checkout source code
-        uses: actions/checkout@v4
-      - name: Log in to Docker Hub Container Registry
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push snapshot Docker image (linux/amd64)
-        run: make release GOTENBERG_VERSION=${{ github.head_ref }} DOCKER_REPOSITORY=snapshot LINUX_AMD64_RELEASE=true
+    - uses: gulien/del-docker-tag@main
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        tags: "${{ needs.snapshot_amd64.outputs.arch_tags }},${{ needs.snapshot_386.outputs.arch_tags }},${{ needs.snapshot_arm64.outputs.arch_tags }},${{ needs.snapshot_arm_v7.outputs.arch_tags }}"
 
   edge_release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
